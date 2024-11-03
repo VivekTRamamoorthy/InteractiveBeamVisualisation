@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beam Calculator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            touch-action: none;
+            overflow: hidden;
+        }
+
+        canvas {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            touch-action: none;
+            width: 100%;
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="beamCanvas"></canvas>
+    <div class="info" id="reactionInfo">
+        Move the load along the beam using mouse or touch
+    </div>
+
+    <script>
+        const canvas = document.getElementById('beamCanvas');
+        const ctx = canvas.getContext('2d');
+        const info = document.getElementById('reactionInfo');
+
+        // Set canvas size based on window width
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = Math.min(window.innerHeight * 0.5, 300);
+        }
+
+        // Initial resize
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Beam parameters
+        const SUPPORT_SPACING = 1000; // mm (fixed)
+        let scale; // pixels per mm
+        let beamLength;
+        let overhang;
+        let loadPosition = 0;
+        let load = 1000; // N
+
+        function updateDimensions() {
+            // Calculate scale based on canvas width and fixed support spacing
+            scale = (canvas.width * 0.5) / SUPPORT_SPACING;
+            overhang = SUPPORT_SPACING * 0.5;
+            beamLength = SUPPORT_SPACING + 2 * overhang;
+            
+            // Convert load position to new scale
+            loadPosition = loadPosition * scale;
+        }
+
+        // Convert screen coordinates to mm
+        function pixelsToMm(pixels) {
+            return pixels / scale;
+        }
+
+        // Convert mm to screen coordinates
+        function mmToPixels(mm) {
+            return mm * scale;
+        }
+
+        updateDimensions();
+
+        function calculateReactions(loadPosPixels) {
+            // Convert position to mm from left support
+            const a = pixelsToMm(loadPosPixels - mmToPixels(overhang));
+            
+            // Calculate reactions
+            const leftSupport = (load * (SUPPORT_SPACING - a)) / SUPPORT_SPACING;
+            const rightSupport = load - leftSupport;
+            
+            return {
+                left: Math.round(leftSupport),
+                right: Math.round(rightSupport)
+            };
+        }
+
+        function drawText(text, x, y) {
+            ctx.save();
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, x, y);
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const beamY = canvas.height * 0.6;
+            const supportHeight = 40;
+            
+            // Draw beam
+            ctx.beginPath();
+            ctx.moveTo(0, beamY);
+            ctx.lineTo(canvas.width, beamY);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Draw supports
+            const leftSupportX = mmToPixels(overhang);
+            const rightSupportX = mmToPixels(overhang + SUPPORT_SPACING);
+
+            ctx.beginPath();
+            ctx.moveTo(leftSupportX, beamY);
+            ctx.lineTo(leftSupportX - 20, beamY + supportHeight);
+            ctx.lineTo(leftSupportX + 20, beamY + supportHeight);
+            ctx.closePath();
+            ctx.fillStyle = '#666';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(rightSupportX, beamY);
+            ctx.lineTo(rightSupportX - 20, beamY + supportHeight);
+            ctx.lineTo(rightSupportX + 20, beamY + supportHeight);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw load (square)
+            const squareSize = 30;
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(loadPosition - squareSize/2, beamY - squareSize, squareSize, squareSize);
+
+            // Calculate and display reactions
+            const reactions = calculateReactions(loadPosition);
+
+            // Draw load value
+            drawText(load + ' N', loadPosition, beamY - squareSize - 10);
+
+            // Draw reaction arrows and values
+            function drawArrow(x, force) {
+                const arrowLength = Math.min(force / 20, 40);
+                const y = beamY + supportHeight + 10;
+                
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + arrowLength);
+                ctx.strokeStyle = '#2ecc71';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Arrow head
+                ctx.beginPath();
+                ctx.moveTo(x - 5, y + arrowLength - 5);
+                ctx.lineTo(x, y + arrowLength);
+                ctx.lineTo(x + 5, y + arrowLength - 5);
+                ctx.stroke();
+
+                // Draw reaction value
+                drawText(force + ' N', x, y + arrowLength + 20);
+            }
+
+            drawArrow(leftSupportX, reactions.left);
+            drawArrow(rightSupportX, reactions.right);
+
+            // Draw dimensions
+            // Distance between supports
+            ctx.beginPath();
+            ctx.moveTo(leftSupportX, beamY + 10);
+            ctx.lineTo(rightSupportX, beamY + 10);
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            drawText('1000 mm', (leftSupportX + rightSupportX)/2, beamY + 25);
+
+            // Distance from left support to load
+            const distFromLeft = pixelsToMm(loadPosition - leftSupportX);
+            ctx.beginPath();
+            ctx.moveTo(leftSupportX, beamY - 10);
+            ctx.lineTo(loadPosition, beamY - 10);
+            ctx.stroke();
+            drawText(Math.round(distFromLeft) + ' mm', leftSupportX + mmToPixels(distFromLeft)/2, beamY - 20);
+        }
+
+        // Event handlers
+        function updateLoadPosition(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - rect.left;
+            
+            // Constrain load position to beam length
+            loadPosition = Math.max(0, Math.min(canvas.width, x));
+            draw();
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (e.buttons === 1) {
+                updateLoadPosition(e);
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            updateLoadPosition(e);
+        });
+
+        // Initial draw
+        draw();
+    </script>
+</body>
+</html>
